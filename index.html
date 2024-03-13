@@ -1,0 +1,350 @@
+<!-- Use DES178_IntegrateBLE_Sensor.ino to pair and receive light sensor data -->
+<!DOCTYPE html>
+<html>
+<head>
+<title>ASL Sign Kids</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap" rel="stylesheet">
+<script type="text/javascript" src="../js/smoothie.js"></script>
+<link rel="stylesheet" type="text/css" href="style.css">
+</head>
+<body>
+    <div class="greeting">Hi, Mona</div>
+    <div class="sub-greeting">Start Learning and Growing Today</div>
+
+    <!-- <div class="day-picker">
+        <span>M</span>
+        <span>T</span>
+        <span>W</span>
+        <span>T</span>
+        <span>F</span>
+    </div>
+    <div>
+        <span> 10 </span> 
+        <span>11</span>
+        <span>12</span>
+        <span>13</span>
+        <span>14</span>
+    </div> -->
+
+    <div class="story-container">
+    <div class="story-card" id="kitty" >
+        <a href="kitty.html"> Story of Kitty</a>
+    </div>
+
+    <div class="break"></div>
+
+
+    <div class="story-card" id="frog">
+        <p>Froggy and Flower</p>
+    </div>
+    <div class="break"></div>
+
+
+    <div class="story-card" id="sea">
+        <p>Seaside Tale</p>
+    </div>
+    </div>  
+
+<button id="connect">Connect</button>
+<button id="disconnect">Disconnect</button>
+
+
+<!--
+<button id="readSensor">Read Sensor</button>
+<button id="chartSensorON">Chart Readings ON</button> --> 
+<h5> Flex Sensor: </h5>
+<!-- <form id="form1">
+
+        <input type="text" name="command" id="command" size=20 />&nbsp;
+        <input type="button" id="execute" value="Execute Command" />&nbsp;
+        <input type="reset" value="Clear" />
+
+</form> -->
+
+<p id="demo"></p>
+<canvas id="mycanvas" width="400" height="100" style="visibility:hidden"></canvas>
+
+<script>
+takeReadings = false;
+var input = document.getElementById("command");
+input.addEventListener("keydown", function(event) {
+    if (event.keyCode === 13) {
+        event.preventDefault();
+    }
+});
+
+input.addEventListener("keyup", function(event) {
+    if (event.keyCode === 13) {
+        event.preventDefault();
+        document.getElementById("execute").click();
+    }
+});
+
+function sleep(milliseconds) {
+  const date = Date.now();
+  let currentDate = null;
+  do {
+    currentDate = Date.now();
+  } while (currentDate - date < milliseconds);
+}
+</script>
+
+<script>
+      var line1 = new TimeSeries();
+      var smoothie = new SmoothieChart({ grid: { strokeStyle: 'rgb(125, 0, 0)', fillStyle: 'rgb(60, 0, 0)', lineWidth: 1, millisPerLine: 250, verticalSections: 6 } });
+      smoothie.addTimeSeries(line1, {lineWidth:2,strokeStyle:'#00ff00'});
+      smoothie.streamTo(document.getElementById("mycanvas"), 500);
+</script>
+
+<script type="text/javascript">
+var bobble;
+var bobbleWrite;
+var bobbleRead;
+var bobbleService;
+var lastSensorValue = 0;
+document.getElementById("connect").addEventListener("click", function(){
+  navigator.bluetooth.requestDevice({ filters: [{ services: ['6e400001-b5a3-f393-e0a9-e50e24dcca9e'] }]  })
+  .then(device => {
+    bobble= device;
+    // Attempts to connect to remote GATT Server.
+    document.getElementById("demo").innerHTML = "Bobble connected";
+    sleep(10);
+    return device.gatt.connect();
+  })
+  .then(server => {
+    sleep(10);
+    // Getting primary UART service
+    return server.getPrimaryService('6e400001-b5a3-f393-e0a9-e50e24dcca9e');
+  })
+  .then(service => {
+    bobbleService= service;
+    sleep(10);
+    // Getting rx characteristic
+    return service.getCharacteristic('6e400003-b5a3-f393-e0a9-e50e24dcca9e');
+  })
+  .then(rxcharacteristic => {
+    sleep(20);
+    bobbleRead= rxcharacteristic;
+    rxcharacteristic.startNotifications();
+    sleep(20); // Getting tx characteristic
+    return bobbleService.getCharacteristic('6e400002-b5a3-f393-e0a9-e50e24dcca9e');
+  })
+  .then(characteristic => {
+    sleep(100);
+    bobbleRead.addEventListener('characteristicvaluechanged', handleSensorChanged);
+    // turn off motor and reset servo
+    sleep(20);
+    bobbleWrite= characteristic;
+    let encoder = new TextEncoder();
+    return characteristic.writeValue(encoder.encode(". - 0 s\n"));
+  })
+
+  .catch(error => { alert(error); });
+
+});
+
+
+
+function handleSensorChanged(event) {
+    let value = event.target.value;
+    // Convert raw data bytes to character values and use these to
+    // construct a string.
+    let str = "";
+    if (value.getUint8(0)==13) return;
+    for (let i = 0; i < value.byteLength; i++) {
+        str += String.fromCharCode(value.getUint8(i));
+    }
+    if (takeReadings) {
+          line1.append(new Date().getTime(), parseInt(str));
+    }
+    document.getElementById("demo").innerHTML = str + "jajajaja";
+    document.getElementById("command").value = "x";
+    lastSensorValue= parseInt(str);
+
+    console.log("Received sensor data: " + str);
+
+}
+
+
+document.getElementById("disconnect").addEventListener("click", function(){
+  document.getElementById("demo").innerHTML = "Bobble disconnected";
+  bobble.gatt.disconnect();
+});
+
+document.getElementById("motoron").addEventListener("click", function(){
+    // Writing '+'
+    let encoder = new TextEncoder();
+    bobbleWrite.writeValue(encoder.encode("+\n"));
+    document.getElementById("demo").innerHTML = "ON";
+    document.getElementById("command").value = "+";
+});
+
+document.getElementById("motoroff").addEventListener("click", function(){
+    let encoder = new TextEncoder();
+    bobbleWrite.writeValue(encoder.encode("-\n"));
+    document.getElementById("demo").innerHTML = "OFF";
+    document.getElementById("command").value = "-";
+});
+
+document.getElementById("zap").addEventListener("click", function(){
+    let encoder = new TextEncoder();
+    bobbleWrite.writeValue(encoder.encode("z\n"));
+    document.getElementById("demo").innerHTML = "Zap";
+    document.getElementById("command").value = "z";
+});
+
+document.getElementById("reverse").addEventListener("click", function(){
+    let encoder = new TextEncoder();
+    bobbleWrite.writeValue(encoder.encode("R\n"));
+    document.getElementById("demo").innerHTML = "REVERSE";
+    document.getElementById("command").value = "R";
+}) ;
+
+document.getElementById("forward").addEventListener("click", function(){
+    let encoder = new TextEncoder();
+    bobbleWrite.writeValue(encoder.encode("F\n"));
+    document.getElementById("demo").innerHTML = "FORWARD";
+    document.getElementById("command").value = "F";
+});
+
+document.getElementById("servo0").addEventListener("click", function(){
+    let encoder = new TextEncoder();
+    bobbleWrite.writeValue(encoder.encode("0 s\n"));
+    document.getElementById("demo").innerHTML = "Servo= 0";
+    document.getElementById("command").value = "0 s";
+});
+
+document.getElementById("servo45").addEventListener("click", function(){
+    let encoder = new TextEncoder();
+    bobbleWrite.writeValue(encoder.encode("45 s\n"));
+    document.getElementById("demo").innerHTML = "Servo= 45";
+    document.getElementById("command").value = "45 s";
+});
+
+document.getElementById("servo90").addEventListener("click", function(){
+    let encoder = new TextEncoder();
+    bobbleWrite.writeValue(encoder.encode("90 s\n"));
+    document.getElementById("demo").innerHTML = "Servo= 90";
+    document.getElementById("command").value = "90 s";
+});
+
+document.getElementById("servo135").addEventListener("click", function(){
+    let encoder = new TextEncoder();
+    bobbleWrite.writeValue(encoder.encode("135 s\n"));
+    document.getElementById("demo").innerHTML = "Servo= 135";
+    document.getElementById("command").value = "135 s";
+});
+
+document.getElementById("servo180").addEventListener("click", function(){
+    let encoder = new TextEncoder();
+    bobbleWrite.writeValue(encoder.encode("180 s\n"));
+    document.getElementById("demo").innerHTML = "Servo= 180";
+    document.getElementById("command").value = "180 s";
+});
+
+document.getElementById("servowag").addEventListener("click", function(){
+    let encoder = new TextEncoder();
+    bobbleWrite.writeValue(encoder.encode(". 0 s ( 85 s ) 3500 *\n"));
+    document.getElementById("demo").innerHTML = "Servo= wag 0-85 deg. Cancel with Disable Trigger";
+    document.getElementById("command").value = ". 0 s ( 85 s ) 3500 *";
+});
+
+document.getElementById("neoRed").addEventListener("click", function(){
+    let encoder = new TextEncoder();
+    bobbleWrite.writeValue(encoder.encode("0 49 500 N\n"));
+    document.getElementById("demo").innerHTML = "Red";
+    document.getElementById("command").value = "0 49 500 N";
+});
+
+document.getElementById("neoOrange").addEventListener("click", function(){
+    let encoder = new TextEncoder();
+    bobbleWrite.writeValue(encoder.encode("0 49 710 N\n"));
+    document.getElementById("demo").innerHTML = "Orange";
+    document.getElementById("command").value = "0 49 710 N";
+});
+
+document.getElementById("neoYellow").addEventListener("click", function(){
+    let encoder = new TextEncoder();
+    bobbleWrite.writeValue(encoder.encode("0 49 730 N\n"));
+    document.getElementById("demo").innerHTML = "Yellow";
+    document.getElementById("command").value = "0 49 730 N";
+});
+
+document.getElementById("neoGreen").addEventListener("click", function(){
+    let encoder = new TextEncoder();
+    bobbleWrite.writeValue(encoder.encode("0 49 070 N\n"));
+    document.getElementById("demo").innerHTML = "Green";
+    document.getElementById("command").value = "0 49 070 N"; });
+
+document.getElementById("neoBlue").addEventListener("click", function(){
+    let encoder = new TextEncoder();
+    bobbleWrite.writeValue(encoder.encode("0 49 007 N\n"));
+    document.getElementById("demo").innerHTML = "Blue";
+    document.getElementById("command").value = "0 49 007 N"; });
+
+document.getElementById("neoViolet").addEventListener("click", function(){
+    let encoder = new TextEncoder();
+    bobbleWrite.writeValue(encoder.encode("0 49 405 N\n"));
+    document.getElementById("demo").innerHTML = "Violet";
+    document.getElementById("command").value = "0 49 405 N"; });
+
+document.getElementById("neoRainbow").addEventListener("click", function(){
+    let encoder = new TextEncoder();
+    bobbleWrite.writeValue(encoder.encode("3050 n\n"));
+    document.getElementById("demo").innerHTML = "Rainbow";
+    document.getElementById("command").value = "3050 n"; });
+
+document.getElementById("neoPeacetree").addEventListener("click", function(){
+    let encoder = new TextEncoder();
+    bobbleWrite.writeValue(encoder.encode("0 49 0 N 50 n\n"));
+    document.getElementById("demo").innerHTML = "Blinking Lights";
+    document.getElementById("command").value = "0 49 0 N 50 n"; });
+
+document.getElementById("neoOff").addEventListener("click", function(){
+    let encoder = new TextEncoder();
+    bobbleWrite.writeValue(encoder.encode("0 49 0 N\n"));
+    document.getElementById("demo").innerHTML = "LEDs OFF";
+    document.getElementById("command").value = "0 49 0 N"; });
+
+document.getElementById("disableTrigger").addEventListener("click", function(){
+    let encoder = new TextEncoder();
+    bobbleWrite.writeValue(encoder.encode(".\n"));
+    document.getElementById("demo").innerHTML = "Disable trigger";
+    document.getElementById("command").value = "."; });
+
+document.getElementById("readSensor").addEventListener("click", function(){
+    let encoder = new TextEncoder();
+    bobbleWrite.writeValue(encoder.encode("x\n"));
+});
+
+document.getElementById("execute").addEventListener("click", function(){
+    let encoder = new TextEncoder();
+    let inputCommand = document.getElementById("command").value;
+    bobbleWrite.writeValue(encoder.encode(inputCommand+"\n"));
+    document.getElementById("demo").innerHTML = "command="+"'"+inputCommand+"'";
+});
+
+document.getElementById("chartSensorON").addEventListener("click", function(){
+	takeReadings = ! takeReadings;
+	if (takeReadings) {
+	  document.getElementById("mycanvas").style.visibility="visible";
+	  document.getElementById("chartSensorON").innerHTML= "Chart Readings OFF";
+	  chartTimer=setInterval(function() {
+	  let encoder = new TextEncoder();
+	  bobbleWrite.writeValue(encoder.encode("x\n"));
+      	  }, 500);
+	} else {
+	  document.getElementById("mycanvas").style.visibility="hidden";
+	  document.getElementById("chartSensorON").innerHTML= "Chart Readings ON";
+	  line1.data = [];
+	  clearInterval(chartTimer);
+	}
+});
+
+</script>
+
+
+</body>
+</html>
